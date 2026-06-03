@@ -16,9 +16,12 @@ if ficheiro_carregado is not None:
         with st.spinner("A analisar o PDF..."):
             dados = []
             
-            # Padrões de texto (Regex) para encontrar os dados
+            # Padrões de texto
             padrao_fatura = r"Fatura N\.º\s+(.+)"
             padrao_data = r"Data de Emissão:\s+(\d{2}-\d{2}-\d{4})"
+            
+            # NOVA REGRA: Procura a sequência de letras A-N-U-L-A-D-O/A, permitindo qualquer quantidade de espaços ou quebras de linha entre elas
+            padrao_anulada = r"a\s*n\s*u\s*l\s*a\s*d\s*[ao]"
             
             # Lê o PDF carregado
             with pdfplumber.open(ficheiro_carregado) as pdf:
@@ -27,31 +30,29 @@ if ficheiro_carregado is not None:
                     if not texto:
                         continue
                         
-                    # 1. Procurar Fatura e Data
+                    # Procurar Fatura e Data
                     fatura_match = re.search(padrao_fatura, texto)
                     data_match = re.search(padrao_data, texto)
                     
-                    if fatura_match: # Só processa se for uma página de fatura
+                    if fatura_match:
                         
-                        # --- NOVA REGRA: Verificar se a fatura está anulada ---
-                        # Se a palavra "anulada" aparecer em qualquer parte do texto da página:
-                        if "anulada" in texto.lower():
-                            valor = "0" # Pode mudar para "0,00€" se preferir manter o símbolo
+                        # Verifica se é uma fatura anulada usando a regra super agressiva
+                        if re.search(padrao_anulada, texto.lower()):
+                            valor = "0,00€"
                         else:
                             # Se não estiver anulada, extrai o Valor Total normalmente
                             valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
                             valor = valor_match.group(1).strip() if valor_match else "N/D"
 
-                        # 3. Extrair o Número de Cliente
+                        # Extrair o Número de Cliente
                         cliente = "N/D"
                         linhas = texto.split('\n')
                         for idx, linha in enumerate(linhas):
                             if "Contribuinte" in linha and "Cliente" in linha:
-                                # Apanha a linha seguinte que contém os valores
                                 if idx + 1 < len(linhas):
                                     valores = linhas[idx+1].split()
                                     if len(valores) >= 2:
-                                        cliente = valores[1] # O Cliente é a 2ª coluna
+                                        cliente = valores[1]
                                 break
                         
                         # Guardar a linha da tabela
@@ -62,15 +63,12 @@ if ficheiro_carregado is not None:
                             "Valor": valor
                         })
             
-            # Mostrar os resultados na App
+            # Mostrar os resultados
             if dados:
                 df = pd.DataFrame(dados)
                 st.success(f"Foram encontradas {len(dados)} faturas!")
-                
-                # Mostra a tabela no ecrã
                 st.dataframe(df, use_container_width=True)
                 
-                # Cria o botão de download do CSV com o separador corrigido para o Excel PT (sep=';')
                 csv = df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
                 st.download_button(
                     label="📥 Descarregar para Excel",
