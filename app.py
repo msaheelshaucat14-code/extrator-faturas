@@ -32,12 +32,17 @@ if ficheiro_carregado is not None:
                     data_match = re.search(padrao_data, texto)
                     
                     if fatura_match: # Só processa se for uma página de fatura
-                        # 2. Extrair o Valor Total (Procura "Total a pagar" e captura o valor com € a seguir)
-                        valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
-                        valor = valor_match.group(1).strip() if valor_match else "N/D"
+                        
+                        # --- NOVA REGRA: Verificar se a fatura está anulada ---
+                        # Se a palavra "anulada" aparecer em qualquer parte do texto da página:
+                        if "anulada" in texto.lower():
+                            valor = "0" # Pode mudar para "0,00€" se preferir manter o símbolo
+                        else:
+                            # Se não estiver anulada, extrai o Valor Total normalmente
+                            valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
+                            valor = valor_match.group(1).strip() if valor_match else "N/D"
 
                         # 3. Extrair o Número de Cliente
-                        # Nas faturas Moloni, os dados costumam estar numa tabela por baixo das palavras "Contribuinte Cliente"
                         cliente = "N/D"
                         linhas = texto.split('\n')
                         for idx, linha in enumerate(linhas):
