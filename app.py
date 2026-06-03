@@ -2,6 +2,7 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 import re
+import pytesseract
 
 # Configuração da página da App
 st.set_page_config(page_title="Extrator de Faturas", layout="centered")
@@ -12,7 +13,7 @@ ficheiro_carregado = st.file_uploader("Arraste o ficheiro PDF aqui", type=["pdf"
 
 if ficheiro_carregado is not None:
     if st.button("Extrair Dados"):
-        with st.spinner("A analisar o PDF..."):
+        with st.spinner("A analisar o PDF e a ler marcas de água... Isto pode demorar uns segundos."):
             dados = []
             
             padrao_fatura = r"Fatura N\.º\s+(.+)"
@@ -30,19 +31,26 @@ if ficheiro_carregado is not None:
                     
                     if fatura_match:
                         
-                        # NOVA TÁTICA: Extrair todas as letras cruas do ficheiro (ignorando formatação e rotação)
-                        # Isto apanha as marcas de água que o leitor normal ignora
-                        letras_cruas = "".join([char.get('text', '') for char in pagina.chars]).lower()
-                        
-                        # Procuramos a palavra "anulad" no meio dessa sopa de letras
-                        if "anulad" in letras_cruas:
-                            valor = "0,00€"
-                        else:
-                            # Se não estiver anulada, extrai o Valor Total normalmente
-                            valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
-                            valor = valor_match.group(1).strip() if valor_match else "N/D"
+                        # 1. Extrair o Valor Normal
+                        valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
+                        valor_normal = valor_match.group(1).strip() if valor_match else "N/D"
 
-                        # Extrair o Número de Cliente
+                        # 2. IA para detetar o desenho da marca de água "ANULADA"
+                        try:
+                            # Tira uma "fotografia" da página para conseguir ler os carimbos
+                            imagem = pagina.to_image(resolution=100).original
+                            texto_imagem = pytesseract.image_to_string(imagem).lower()
+                            
+                            # Se a IA ler "anulad" algures na fotografia, força o 0,00€
+                            if "anulad" in texto_imagem:
+                                valor = "0,00€"
+                            else:
+                                valor = valor_normal
+                        except Exception:
+                            # Prevenção: Se a IA falhar a carregar no site, não bloqueia o programa e usa o valor normal
+                            valor = valor_normal
+
+                        # 3. Extrair o Número de Cliente
                         cliente = "N/D"
                         linhas = texto.split('\n')
                         for idx, linha in enumerate(linhas):
@@ -53,6 +61,7 @@ if ficheiro_carregado is not None:
                                         cliente = valores[1]
                                 break
                         
+                        # 4. Guardar a linha da tabela
                         dados.append({
                             "Data da Fatura": data_match.group(1) if data_match else "N/D",
                             "Número de Cliente": cliente,
