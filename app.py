@@ -11,24 +11,29 @@ st.write("Extrai a Data, Número de Cliente, Número da Fatura e Valor.")
 # Área para carregar o ficheiro na app
 ficheiro_carregado = st.file_uploader("Arraste o ficheiro PDF aqui", type=["pdf"])
 
+# --- CAIXA DE DEBUG ---
+modo_debug = st.checkbox("🐞 Ativar Modo de Depuração (Ver o texto cru lido pelo programa)")
+
 if ficheiro_carregado is not None:
     if st.button("Extrair Dados"):
         with st.spinner("A analisar o PDF..."):
             dados = []
             
-            # Padrões de texto
             padrao_fatura = r"Fatura N\.º\s+(.+)"
             padrao_data = r"Data de Emissão:\s+(\d{2}-\d{2}-\d{4})"
-            
-            # NOVA REGRA: Procura a sequência de letras A-N-U-L-A-D-O/A, permitindo qualquer quantidade de espaços ou quebras de linha entre elas
             padrao_anulada = r"a\s*n\s*u\s*l\s*a\s*d\s*[ao]"
             
-            # Lê o PDF carregado
             with pdfplumber.open(ficheiro_carregado) as pdf:
                 for pagina in pdf.pages:
                     texto = pagina.extract_text()
+                    
                     if not texto:
                         continue
+                    
+                    # Se o botão de debug estiver ligado, mostra o texto de cada página no ecrã!
+                    if modo_debug:
+                        with st.expander(f"Texto lido pelo Python na Página {pagina.page_number}"):
+                            st.code(texto)
                         
                     # Procurar Fatura e Data
                     fatura_match = re.search(padrao_fatura, texto)
@@ -36,11 +41,11 @@ if ficheiro_carregado is not None:
                     
                     if fatura_match:
                         
-                        # Verifica se é uma fatura anulada usando a regra super agressiva
+                        # Verifica se está anulada (caso o texto algum dia apareça)
                         if re.search(padrao_anulada, texto.lower()):
                             valor = "0,00€"
                         else:
-                            # Se não estiver anulada, extrai o Valor Total normalmente
+                            # Extrair o Valor Total normalmente
                             valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
                             valor = valor_match.group(1).strip() if valor_match else "N/D"
 
@@ -55,7 +60,6 @@ if ficheiro_carregado is not None:
                                         cliente = valores[1]
                                 break
                         
-                        # Guardar a linha da tabela
                         dados.append({
                             "Data da Fatura": data_match.group(1) if data_match else "N/D",
                             "Número de Cliente": cliente,
