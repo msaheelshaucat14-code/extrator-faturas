@@ -8,11 +8,7 @@ st.set_page_config(page_title="Extrator de Faturas", layout="centered")
 st.title("🧾 Extrator Rápido de Faturas")
 st.write("Extrai a Data, Número de Cliente, Número da Fatura e Valor.")
 
-# Área para carregar o ficheiro na app
 ficheiro_carregado = st.file_uploader("Arraste o ficheiro PDF aqui", type=["pdf"])
-
-# --- CAIXA DE DEBUG ---
-modo_debug = st.checkbox("🐞 Ativar Modo de Depuração (Ver o texto cru lido pelo programa)")
 
 if ficheiro_carregado is not None:
     if st.button("Extrair Dados"):
@@ -21,7 +17,6 @@ if ficheiro_carregado is not None:
             
             padrao_fatura = r"Fatura N\.º\s+(.+)"
             padrao_data = r"Data de Emissão:\s+(\d{2}-\d{2}-\d{4})"
-            padrao_anulada = r"a\s*n\s*u\s*l\s*a\s*d\s*[ao]"
             
             with pdfplumber.open(ficheiro_carregado) as pdf:
                 for pagina in pdf.pages:
@@ -29,23 +24,21 @@ if ficheiro_carregado is not None:
                     
                     if not texto:
                         continue
-                    
-                    # Se o botão de debug estiver ligado, mostra o texto de cada página no ecrã!
-                    if modo_debug:
-                        with st.expander(f"Texto lido pelo Python na Página {pagina.page_number}"):
-                            st.code(texto)
                         
-                    # Procurar Fatura e Data
                     fatura_match = re.search(padrao_fatura, texto)
                     data_match = re.search(padrao_data, texto)
                     
                     if fatura_match:
                         
-                        # Verifica se está anulada (caso o texto algum dia apareça)
-                        if re.search(padrao_anulada, texto.lower()):
+                        # NOVA TÁTICA: Extrair todas as letras cruas do ficheiro (ignorando formatação e rotação)
+                        # Isto apanha as marcas de água que o leitor normal ignora
+                        letras_cruas = "".join([char.get('text', '') for char in pagina.chars]).lower()
+                        
+                        # Procuramos a palavra "anulad" no meio dessa sopa de letras
+                        if "anulad" in letras_cruas:
                             valor = "0,00€"
                         else:
-                            # Extrair o Valor Total normalmente
+                            # Se não estiver anulada, extrai o Valor Total normalmente
                             valor_match = re.search(r"Total a pagar[\s\S]*?([\d.,]+€)", texto)
                             valor = valor_match.group(1).strip() if valor_match else "N/D"
 
@@ -67,7 +60,6 @@ if ficheiro_carregado is not None:
                             "Valor": valor
                         })
             
-            # Mostrar os resultados
             if dados:
                 df = pd.DataFrame(dados)
                 st.success(f"Foram encontradas {len(dados)} faturas!")
